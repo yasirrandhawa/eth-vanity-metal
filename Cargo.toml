@@ -1,0 +1,41 @@
+[package]
+name = "eth-vanity-metal"
+version = "1.0.0"
+edition = "2021"
+authors = ["mrtozner"]
+description = "A blazingly fast Metal GPU-accelerated Ethereum vanity address generator for Apple Silicon"
+license = "MIT"
+repository = "https://github.com/mrtozner/eth-vanity-metal"
+homepage = "https://github.com/mrtozner/eth-vanity-metal"
+documentation = "https://github.com/mrtozner/eth-vanity-metal#readme"
+readme = "README.md"
+keywords = ["ethereum", "vanity", "gpu", "metal", "apple-silicon", "crypto", "address-generator"]
+categories = ["cryptography", "command-line-utilities"]
+
+[dependencies]
+secp256k1 = { version = "0.28", features = ["rand", "global-context"] }
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+rayon = "1.8"
+rand = "0.8"
+clap = { version = "4.4", features = ["derive"] }
+indicatif = "0.17"
+num_cpus = "1.16"
+hex = "0.4"
+sysinfo = "0.30"
+ctrlc = "3.4"
+crossbeam-channel = "0.5"
+num-bigint = "0.4"
+num-traits = "0.2"
+
+# Metal GPU acceleration (macOS only)
+metal = "0.29"
+objc = "0.2"
+block = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+# Native CPU optimizations are automatically applied via .cargo/config.toml

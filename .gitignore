@@ -1,0 +1,33 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+*.log
+
+# Cargo
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Private keys (safety)
+*.key
+*.pem
+private_keys.txt
+
+# Claude Code
+.todos
+.todos.md
+
+# Temporary files
+*.tmp
+*.bak
