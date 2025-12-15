@@ -6,6 +6,7 @@
 pub mod pipeline;
 pub mod native_search;
 pub mod precompute;
+pub mod profanity_batch;
 
 use metal::{Device, CommandQueue};
 use std::sync::Arc;

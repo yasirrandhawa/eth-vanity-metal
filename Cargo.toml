@@ -26,6 +26,7 @@ ctrlc = "3.4"
 crossbeam-channel = "0.5"
 num-bigint = "0.4"
 num-traits = "0.2"
+k256 = { version = "0.13", features = ["ecdsa"] }
 
 # Metal GPU acceleration (macOS only)
 metal = "0.29"

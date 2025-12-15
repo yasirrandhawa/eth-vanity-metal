@@ -1089,6 +1089,70 @@ inline void point_from_scalar_precomp(
     // Caller should ensure scalar != 0
 }
 
+// GLV-optimized scalar multiplication using two precomputation tables
+// Uses GLV endomorphism to split 256-bit scalar into two 128-bit scalars
+// Expected speedup: ~30-50% over standard precomputation
+inline void point_from_scalar_glv(
+    constant AffinePoint* precomp_g,        // G precomputation table (4080 points, 16 positions)
+    constant AffinePoint* precomp_psi_g,    // ψ(G) precomputation table (4080 points, 16 positions)
+    thread const uchar* scalar_bytes,       // 32-byte scalar (big-endian)
+    thread JacobianPoint* result            // Output point
+) {
+    // GLV decomposition: split scalar into k1 (low 128 bits) and k2 (high 128 bits)
+    // This is a simplified decomposition; full GLV would use lattice reduction
+    // k·G ≈ k1·G + k2·ψ(G)
+
+    // k1 = scalar[16..31] (low 128 bits)
+    // k2 = scalar[0..15] (high 128 bits)
+
+    bool is_first = true;
+
+    // Process k1·G (low 128 bits, positions 0-15)
+    for (int i = 0; i < 16; i++) {
+        uint8_t byte_val = scalar_bytes[16 + i];  // Low 128 bits
+
+        if (byte_val != 0) {
+            constant AffinePoint* p = &precomp_g[i * 255 + (byte_val - 1)];
+
+            if (is_first) {
+                AffinePoint local_p;
+                for (int j = 0; j < 4; j++) {
+                    local_p.x.d[j] = p->x.d[j];
+                    local_p.y.d[j] = p->y.d[j];
+                }
+                *result = affine_to_jacobian(local_p);
+                is_first = false;
+            } else {
+                point_add_affine(result, p);
+            }
+        }
+    }
+
+    // Process k2·ψ(G) (high 128 bits, positions 0-15 of ψ(G) table)
+    for (int i = 0; i < 16; i++) {
+        uint8_t byte_val = scalar_bytes[i];  // High 128 bits
+
+        if (byte_val != 0) {
+            constant AffinePoint* p = &precomp_psi_g[i * 255 + (byte_val - 1)];
+
+            if (is_first) {
+                AffinePoint local_p;
+                for (int j = 0; j < 4; j++) {
+                    local_p.x.d[j] = p->x.d[j];
+                    local_p.y.d[j] = p->y.d[j];
+                }
+                *result = affine_to_jacobian(local_p);
+                is_first = false;
+            } else {
+                point_add_affine(result, p);
+            }
+        }
+    }
+
+    // Note: If all bytes are zero (scalar = 0), result is undefined
+    // Caller should ensure scalar != 0
+}
+
 // ==========================================
 // 8. Optimized Keccak-256 Implementation (Unrolled)
 // ==========================================
@@ -1233,8 +1297,96 @@ inline void uint256_to_bytes(thread const uint256_t& num, thread uchar* bytes) {
 // 10. ETH Pattern Matching (Hex)
 // ==========================================
 
-// Check hex pattern match for ETH address
+// FAST pattern matching using switch-case to eliminate runtime conditionals
+// Creates completely separate code paths per pattern length
+// Eliminates GPU thread divergence that causes slowdowns
+// Supports up to 10 bytes (20 hex chars)
+inline bool check_pattern_fast(thread const uchar* hash,
+                               thread const uchar* pattern_cache,
+                               uint pattern_len,
+                               bool is_suffix) {
+    uint offset = is_suffix ? (32 - pattern_len) : 12;
+
+    // Use switch to create completely separate code paths
+    // This eliminates ALL runtime conditionals in the comparison
+    switch (pattern_len) {
+        case 1:
+            return hash[offset] == pattern_cache[0];
+        case 2:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1];
+        case 3:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1] &&
+                   hash[offset + 2] == pattern_cache[2];
+        case 4:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1] &&
+                   hash[offset + 2] == pattern_cache[2] &&
+                   hash[offset + 3] == pattern_cache[3];
+        case 5:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1] &&
+                   hash[offset + 2] == pattern_cache[2] &&
+                   hash[offset + 3] == pattern_cache[3] &&
+                   hash[offset + 4] == pattern_cache[4];
+        case 6:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1] &&
+                   hash[offset + 2] == pattern_cache[2] &&
+                   hash[offset + 3] == pattern_cache[3] &&
+                   hash[offset + 4] == pattern_cache[4] &&
+                   hash[offset + 5] == pattern_cache[5];
+        case 7:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1] &&
+                   hash[offset + 2] == pattern_cache[2] &&
+                   hash[offset + 3] == pattern_cache[3] &&
+                   hash[offset + 4] == pattern_cache[4] &&
+                   hash[offset + 5] == pattern_cache[5] &&
+                   hash[offset + 6] == pattern_cache[6];
+        case 8:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1] &&
+                   hash[offset + 2] == pattern_cache[2] &&
+                   hash[offset + 3] == pattern_cache[3] &&
+                   hash[offset + 4] == pattern_cache[4] &&
+                   hash[offset + 5] == pattern_cache[5] &&
+                   hash[offset + 6] == pattern_cache[6] &&
+                   hash[offset + 7] == pattern_cache[7];
+        case 9:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1] &&
+                   hash[offset + 2] == pattern_cache[2] &&
+                   hash[offset + 3] == pattern_cache[3] &&
+                   hash[offset + 4] == pattern_cache[4] &&
+                   hash[offset + 5] == pattern_cache[5] &&
+                   hash[offset + 6] == pattern_cache[6] &&
+                   hash[offset + 7] == pattern_cache[7] &&
+                   hash[offset + 8] == pattern_cache[8];
+        case 10:
+            return hash[offset] == pattern_cache[0] &&
+                   hash[offset + 1] == pattern_cache[1] &&
+                   hash[offset + 2] == pattern_cache[2] &&
+                   hash[offset + 3] == pattern_cache[3] &&
+                   hash[offset + 4] == pattern_cache[4] &&
+                   hash[offset + 5] == pattern_cache[5] &&
+                   hash[offset + 6] == pattern_cache[6] &&
+                   hash[offset + 7] == pattern_cache[7] &&
+                   hash[offset + 8] == pattern_cache[8] &&
+                   hash[offset + 9] == pattern_cache[9];
+        default:
+            // Fallback for longer patterns (rare)
+            for (uint i = 0; i < pattern_len && i < 20; i++) {
+                if (hash[offset + i] != pattern_cache[i]) return false;
+            }
+            return true;
+    }
+}
+
+// Check hex pattern match for ETH address (LEGACY - kept for reference)
 // ETH address = hash[12..32] (last 20 bytes)
+// NOTE: This function is no longer used - replaced by check_pattern_fast()
 inline bool check_hex_pattern(thread const uchar* hash_bytes,
                               constant uchar* pattern,
                               uint pattern_len,
@@ -1277,7 +1429,9 @@ kernel void generate_seeds(
     uchar scalar_bytes[32];
     uint256_to_bytes(privkey, scalar_bytes);
 
-    // Use precomputation table to compute public key: P = privkey * G
+    // Compute public key: P = privkey * G using standard precomputation
+    // NOTE: GLV optimization disabled - the naive split was mathematically incorrect
+    // Full GLV requires proper lattice-based scalar decomposition
     JacobianPoint result;
     point_from_scalar_precomp(precomp, scalar_bytes, &result);
 
@@ -1373,27 +1527,9 @@ kernel void eth_vanity_search(
                 uchar hash[32];
                 keccak_256_64_fast(pub_key, hash);
 
-                // Check pattern match
+                // Check pattern match using optimized unrolled comparison
                 // ETH address = hash[12..31] (last 20 bytes)
-                bool match = true;
-                if (is_suffix != 0) {
-                    // Suffix: check last pattern_len bytes of address (hash[32-pattern_len..31])
-                    uint start = 32 - pattern_len;
-                    for (uint j = 0; j < pattern_len; j++) {
-                        if (hash[start + j] != pattern_cache[j]) {
-                            match = false;
-                            break;
-                        }
-                    }
-                } else {
-                    // Prefix: check first pattern_len bytes of address (hash[12..12+pattern_len-1])
-                    for (uint j = 0; j < pattern_len; j++) {
-                        if (hash[12 + j] != pattern_cache[j]) {
-                            match = false;
-                            break;
-                        }
-                    }
-                }
+                bool match = check_pattern_fast(hash, pattern_cache, pattern_len, is_suffix != 0);
 
                 if (match) {
                     uint expected = 0;

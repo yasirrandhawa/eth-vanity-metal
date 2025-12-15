@@ -14,6 +14,7 @@ use eth_vanity_metal::gpu::{
 use eth_vanity_metal::gpu::native_search::{
     GpuNativeSearcher, generate_gpu_seeds, recover_private_key, parse_hex_pattern,
 };
+use eth_vanity_metal::gpu::profanity_batch::search_profanity_batch;
 
 #[derive(Parser)]
 #[command(name = "eth-vanity-metal")]
@@ -44,6 +45,10 @@ struct Cli {
     /// Use GPU-native acceleration (full EC math on GPU)
     #[arg(long = "gpu-native")]
     use_gpu_native: bool,
+
+    /// Use profanity2-style batch inversion (experimental)
+    #[arg(long = "gpu-profanity")]
+    use_gpu_profanity: bool,
 }
 
 fn main() {
@@ -86,7 +91,7 @@ fn main() {
     }
 
     // Check GPU availability if requested
-    if cli.use_gpu_native && !is_gpu_available() {
+    if (cli.use_gpu_native || cli.use_gpu_profanity) && !is_gpu_available() {
         eprintln!("Error: GPU acceleration requested but Metal is not available on this system");
         std::process::exit(1);
     }
@@ -109,7 +114,9 @@ fn main() {
     println!("\nSearching for addresses like: {}", pattern_desc);
 
     // Show acceleration mode
-    if cli.use_gpu_native {
+    if cli.use_gpu_profanity {
+        println!("Acceleration: Metal GPU (profanity2-style batch inversion)");
+    } else if cli.use_gpu_native {
         println!("Acceleration: Metal GPU (native - full EC math on GPU)");
     } else {
         println!("Acceleration: CPU-only");
@@ -129,6 +136,19 @@ fn main() {
 
     let attempts = Arc::new(AtomicU64::new(0));
     let start_time = std::time::Instant::now();
+
+    // Handle GPU-profanity mode (experimental batch inversion)
+    if cli.use_gpu_profanity {
+        if config.prefix.is_none() && config.suffix.is_none() {
+            eprintln!("Error: GPU-profanity mode requires -p (prefix) or -e (suffix)");
+            std::process::exit(1);
+        }
+        if let Err(e) = run_gpu_profanity_search(&config, running.clone(), attempts.clone()) {
+            eprintln!("\nGPU-profanity search failed: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
 
     // Handle GPU-native mode
     if cli.use_gpu_native {
@@ -392,5 +412,64 @@ fn run_gpu_native_search(
     }
 
     println!("\n\nSearch interrupted.");
+    Ok(())
+}
+
+/// Run GPU-profanity search (profanity2-style batch inversion)
+fn run_gpu_profanity_search(
+    config: &VanityConfig,
+    running: Arc<AtomicBool>,
+    _attempts: Arc<AtomicU64>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize GPU context
+    println!("Initializing GPU context...");
+    std::io::stdout().flush().unwrap();
+    let context = gpu_initialize()?;
+    println!("GPU: {}", context.device_name());
+
+    // Determine search mode
+    let is_suffix = config.suffix.is_some();
+    let pattern_str = if is_suffix {
+        config.suffix.as_ref().unwrap()
+    } else {
+        config.prefix.as_ref().unwrap()
+    };
+
+    // Parse hex pattern to bytes
+    let pattern = parse_hex_pattern(pattern_str)?;
+    println!("Pattern: '{}' ({} bytes, {})",
+        pattern_str,
+        pattern.len(),
+        if is_suffix { "suffix" } else { "prefix" }
+    );
+
+    // Run the profanity batch search
+    let stop_signal = running.clone();
+
+    // Progress callback
+    let progress_callback = |total: u64, rate: f64| {
+        print!("\r[GPU-Profanity] Scanned: {} | Speed: {:.2}M keys/s   ",
+            format_number(total),
+            rate
+        );
+        std::io::stdout().flush().unwrap();
+    };
+
+    match search_profanity_batch(&context, &pattern, is_suffix, stop_signal, progress_callback) {
+        Ok(Some((privkey, address))) => {
+            println!("\n\n✓ Found vanity address!");
+            println!("========================");
+            println!("Address:      {}", address);
+            println!("Private Key:  {}", hex::encode(privkey));
+            println!("\nWARNING: Keep your private key secure! Anyone with this key can access your funds.");
+        }
+        Ok(None) => {
+            println!("\n\nSearch interrupted.");
+        }
+        Err(e) => {
+            return Err(format!("Search failed: {:?}", e).into());
+        }
+    }
+
     Ok(())
 }
